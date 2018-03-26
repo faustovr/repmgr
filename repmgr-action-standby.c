@@ -3221,7 +3221,7 @@ do_standby_switchover(void)
 	/*
 	 * if replication slots are required by demotion candidate and/or siblings,
 	 * check the promotion candidate has sufficient free slots
-x	 */
+	 */
 
 	if (min_required_free_slots > 0 )
 	{
