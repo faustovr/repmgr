@@ -343,6 +343,9 @@ bool		atobool(const char *value);
 PGconn *establish_db_connection(const char *conninfo,
 						const bool exit_on_error);
 PGconn	   *establish_db_connection_quiet(const char *conninfo);
+PGconn *establish_db_connection_with_reties(const char *conninfo,
+					    const bool exit_on_error,
+					    const int retry_connections);
 
 PGconn *establish_db_connection_by_params(t_conninfo_param_list *param_list,
 								  const bool exit_on_error);

@@ -34,9 +34,10 @@ int			server_version_num = UNKNOWN_SERVER_VERSION_NUM;
 
 
 static PGconn *_establish_db_connection(const char *conninfo,
-						 const bool exit_on_error,
-						 const bool log_notice,
-						 const bool verbose_only);
+					const bool exit_on_error,
+					const bool log_notice,
+					const bool verbose_only,
+					const int retry_connections);
 
 static PGconn *_get_primary_connection(PGconn *standby_conn, int *primary_id, char *primary_conninfo_out, bool quiet);
 
@@ -113,7 +114,8 @@ wrap_ddl_query(PQExpBufferData *query_buf, int replication_type, const char *fmt
  */
 
 static PGconn *
-_establish_db_connection(const char *conninfo, const bool exit_on_error, const bool log_notice, const bool verbose_only)
+_establish_db_connection(const char *conninfo, const bool exit_on_error, const bool log_notice,
+			 const bool verbose_only, const int retry_connections)
 {
 	PGconn	   *conn = NULL;
 	char	   *connection_string = NULL;
@@ -121,6 +123,7 @@ _establish_db_connection(const char *conninfo, const bool exit_on_error, const b
 
 	t_conninfo_param_list conninfo_params = T_CONNINFO_PARAM_LIST_INITIALIZER;
 	bool		parse_success = false;
+	int             connection_tries;
 
 	initialize_conninfo_params(&conninfo_params, false);
 
@@ -148,30 +151,54 @@ _establish_db_connection(const char *conninfo, const bool exit_on_error, const b
 	{
 		bool		emit_log = true;
 
-		if (verbose_only == true && verbose_logging == false)
-			emit_log = false;
+		/*
+		  Connection failed, but user might want to try connection one more time.
 
-		if (emit_log)
+		  For this we have retry_connections where we pass how many times we should
+		  retry connecting in case connection is not successful.
+		*/
+		connection_tries = 1;
+
+		while (connection_tries < retry_connections)
 		{
-			if (log_notice)
-			{
-				log_notice(_("connection to database failed:\n  %s"),
-						   PQerrorMessage(conn));
-			}
-			else
-			{
-				log_error(_("connection to database failed:\n  %s"),
-						  PQerrorMessage(conn));
-			}
-			log_detail(_("attempted to connect using:\n  %s"),
-					   connection_string);
+			connection_tries++;
+
+			log_debug(_("retry connecting to: \"%s\" for %d time"), connection_string, connection_tries);
+			conn = PQconnectdb(connection_string);
+
+			if (PQstatus(conn) != CONNECTION_OK)
+				break;
 		}
 
-		if (exit_on_error)
+		/* Check if we still have a bad connection */
+		if (PQstatus(conn) != CONNECTION_OK)
 		{
-			PQfinish(conn);
-			free_conninfo_params(&conninfo_params);
-			exit(ERR_DB_CONN);
+
+			if (verbose_only == true && verbose_logging == false)
+				emit_log = false;
+
+			if (emit_log)
+			{
+				if (log_notice)
+				{
+					log_notice(_("connection to database failed:\n  %s"),
+						   PQerrorMessage(conn));
+				}
+				else
+				{
+					log_error(_("connection to database failed:\n  %s"),
+						  PQerrorMessage(conn));
+				}
+				log_detail(_("attempted to connect using:\n  %s"),
+					   connection_string);
+			}
+
+			if (exit_on_error)
+			{
+				PQfinish(conn);
+				free_conninfo_params(&conninfo_params);
+				exit(ERR_DB_CONN);
+			}
 		}
 	}
 
@@ -205,7 +232,7 @@ _establish_db_connection(const char *conninfo, const bool exit_on_error, const b
 PGconn *
 establish_db_connection(const char *conninfo, const bool exit_on_error)
 {
-	return _establish_db_connection(conninfo, exit_on_error, false, false);
+	return _establish_db_connection(conninfo, exit_on_error, false, false, 1);
 }
 
 /*
@@ -215,7 +242,19 @@ establish_db_connection(const char *conninfo, const bool exit_on_error)
 PGconn *
 establish_db_connection_quiet(const char *conninfo)
 {
-	return _establish_db_connection(conninfo, false, false, true);
+	return _establish_db_connection(conninfo, false, false, true, 1);
+}
+
+
+/*
+ * Attempt to establish a database connection, optionally exit on error
+ * output error messages if --verbose option used, but retry in case
+ * connection was unsuccessful
+ */
+PGconn *
+establish_db_connection_with_reties(const char *conninfo, const bool exit_on_error, const int retry_connections)
+{
+	return _establish_db_connection(conninfo, exit_on_error, false, true, retry_connections);
 }
 
 
