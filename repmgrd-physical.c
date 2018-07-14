@@ -2063,7 +2063,7 @@ promote_self(void)
 		return FAILOVER_STATE_PROMOTION_FAILED;
 	}
 
-	/* the presence of either of this command has been established already */
+	/* the presence of this command has been established already */
 	promote_command = config_file_options.promote_command;
 
 	log_debug("promote command is:\n  \"%s\"",

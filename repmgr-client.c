@@ -2732,6 +2732,11 @@ get_server_action(t_server_action action, char *script, char *data_dir)
 					maxlen_snprintf(script, "%s",
 									config_file_options.service_promote_command);
 				}
+				else if (config_file_options.promote_command[0] != '\0')
+				{
+					maxlen_snprintf(script, "%s",
+									config_file_options.promote_command);
+				}
 				else
 				{
 					initPQExpBuffer(&command);
@@ -2799,7 +2804,8 @@ data_dir_required_for_action(t_server_action action)
 			return true;
 
 		case ACTION_PROMOTE:
-			if (config_file_options.service_promote_command[0] != '\0')
+			if (config_file_options.service_promote_command[0] != '\0' ||
+				config_file_options.promote_command[0] != '\0')
 			{
 				return false;
 			}
